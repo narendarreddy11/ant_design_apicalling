@@ -1,5 +1,5 @@
 // src/pages/ProductListPage.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import dayjs from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -8,12 +8,24 @@ import DateRangeFilter from '../components/DateRangeFilter';
 import ProductTable from '../components/ProductTable';
 import NewProductModal from '../components/NewProductModal';
 
+const ADDED_PRODUCTS_KEY = 'addedProducts';
+
 const ProductListPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 👇 new product coming from ConfirmProductPage
+  // 👇 new product coming from ConfirmProductPage (only latest one)
   const newProduct = location.state?.newProduct || null;
+
+  // 👇 keep ALL added products here, initialized from localStorage
+  const [addedProducts, setAddedProducts] = useState(() => {
+    try {
+      const stored = localStorage.getItem(ADDED_PRODUCTS_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const [startDate, setStartDate] = useState(dayjs().subtract(7, 'day'));
   const [endDate, setEndDate] = useState(dayjs());
@@ -53,13 +65,37 @@ const ProductListPage = () => {
     return true;
   });
 
-  // ✅ Final list: if newProduct exists, show it at the top
-  const tableProducts = React.useMemo(() => {
-    if (!newProduct) return filteredProducts;
-    const exists = filteredProducts.some((p) => p.id === newProduct.id);
-    if (exists) return filteredProducts;
-    return [newProduct, ...filteredProducts];
-  }, [filteredProducts, newProduct]);
+  // 🔁 When a newProduct arrives from Confirm page, store it in local state AND localStorage
+  useEffect(() => {
+    if (newProduct) {
+      setAddedProducts((prev) => {
+        const exists = prev.some((p) => p.id === newProduct.id);
+        if (exists) return prev;
+        return [newProduct, ...prev];
+      });
+
+      // Clear location.state so it won't re-add on refresh/back
+      navigate('/products', { replace: true, state: {} });
+    }
+  }, [newProduct, navigate]);
+
+  // 🧷 Sync addedProducts to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(ADDED_PRODUCTS_KEY, JSON.stringify(addedProducts));
+    } catch {
+      // ignore storage errors
+    }
+  }, [addedProducts]);
+
+  // ✅ Final products for table:
+  //    - all locally added products first
+  //    - then filtered products from API
+  const tableProducts = useMemo(() => {
+    // dummyjson won't contain our generated ids, so no need to filter them out,
+    // but we could if we want to be extra safe.
+    return [...addedProducts, ...filteredProducts];
+  }, [addedProducts, filteredProducts]);
 
   return (
     <div className="card shadow-sm">
@@ -126,7 +162,6 @@ const ProductListPage = () => {
           </div>
         )}
 
-        {/* Use tableProducts instead of filteredProducts */}
         <ProductTable products={tableProducts} loading={isLoading} />
 
         <NewProductModal

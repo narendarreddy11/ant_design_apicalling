@@ -32,11 +32,17 @@ const ConfirmProductPage = () => {
   const mutation = useMutation({
     mutationFn: createProduct,
     onSuccess: (data) => {
-      alert(`Product created with ID: ${data.id}`);
+      // 💡 Create a unique frontend id so rows don't clash
+      const newProduct = {
+        ...data,
+        id: Date.now(), // unique each time you add
+      };
+
+      alert(`Product created with ID: ${newProduct.id}`);
 
       // 👉 Send the created product back to the list page
       navigate("/products", {
-        state: { newProduct: data },
+        state: { newProduct },
       });
     },
     onError: (err) => {
